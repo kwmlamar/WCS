@@ -59,8 +59,9 @@ export default function WorkersPage() {
   const loadWorkers = async () => {
     setIsLoading(true);
     try {
-      const data = await fetchWorkers();
-      setWorkers(data);
+      const { data, error } = await supabase.from("workers").select("*");
+      if (error) throw error;
+      setWorkers(data || []);
     } catch (error) {
       console.error("Failed to fetch workers:", error);
     } finally {
@@ -69,36 +70,78 @@ export default function WorkersPage() {
   };
 
   const handleCreateWorker = async (worker: Omit<Worker, "id">) => {
-    // In a real app, this would be an API call to create a worker
-    const newWorker = {
-      id: Date.now().toString(),
-      ...worker,
-    };
-    setWorkers([...workers, newWorker]);
+    // Fetch the current authenticated user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+  
+    if (userError || !user) {
+      console.error("No user is logged in or failed to fetch user.");
+      return;
+    }
+  
+    // Insert the worker with the attached user_id
+    const { data, error } = await supabase
+      .from("workers")
+      .insert([{ ...worker, user_id: user.id }])
+      .select()
+      .single();
+  
+    if (error) {
+      console.error("Create failed:", error);
+      return;
+    }
+  
+    setWorkers([...workers, data]);
     setIsFormOpen(false);
   };
-
   const handleUpdateWorker = async (worker: Worker) => {
-    // In a real app, this would be an API call to update a worker
-    setWorkers(workers.map((w) => (w.id === worker.id ? worker : w)));
+    const { data, error } = await supabase
+      .from("workers")
+      .update(worker)
+      .eq("id", worker.id)
+      .select()
+      .single();
+  
+    if (error) {
+      console.error("Update error:", error.message);
+      return;
+    }
+  
+    setWorkers(workers.map((w) => (w.id === worker.id ? data : w)));
     setSelectedWorker(null);
     setIsFormOpen(false);
   };
 
   const handleDeleteWorker = async () => {
     if (!selectedWorker) return;
-
-    // In a real app, this would be an API call to delete a worker
+  
+    const { error } = await supabase.from("workers").delete().eq("id", selectedWorker.id);
+    if (error) {
+      console.error("Delete error:", error.message);
+      return;
+    }
+  
     setWorkers(workers.filter((w) => w.id !== selectedWorker.id));
     setSelectedWorker(null);
     setIsDeleteDialogOpen(false);
   };
+  
 
   const handleToggleActive = async (worker: Worker) => {
-    // In a real app, this would be an API call to update a worker's active status
-    const updatedWorker = { ...worker, active: !worker.active };
-    setWorkers(workers.map((w) => (w.id === worker.id ? updatedWorker : w)));
+    const { data, error } = await supabase
+      .from("workers")
+      .update({ active: !worker.active })
+      .eq("id", worker.id)
+      .select()
+      .single();
+  
+    if (error) {
+      console.error("Toggle active error:", error.message);
+      return;
+    }
+  
+    setWorkers(workers.map((w) => (w.id === worker.id ? data : w)));
   };
+  
   return (
     <SidebarProvider
       style={

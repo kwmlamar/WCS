@@ -13,18 +13,16 @@ export interface Worker {
     active: boolean
   }
   
-  export interface TimeEntry {
+  export type TimeEntry = {
     id: string
     worker_id: string
     worker_name: string
-    project_id: string | null
-    project_name: string | null
     date: string
-    clock_in: string | null
-    clock_out: string | null
-    hours: number | null
+    hours: number
     is_absent: boolean
     is_auto: boolean
+    project_id: string | null
+    project_name?: string
   }
   
   export interface TimesheetEntry {

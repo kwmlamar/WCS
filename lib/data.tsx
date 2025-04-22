@@ -1,5 +1,6 @@
 import type { Worker, Project, TimeEntry, TimesheetEntry, PayrollEntry, PayrollSettings } from "./types"
 import { format, addDays, differenceInDays, parseISO } from "date-fns"
+import { supabase } from "@/lib/supabaseClient"
 
 // Mock data for workers
 const mockWorkers: Worker[] = [
@@ -98,49 +99,63 @@ export async function fetchWorkers(): Promise<Worker[]> {
 }
 
 // Fetch projects
-export async function fetchProjects(): Promise<Project[]> {
-  // Simulate API call delay
-  await new Promise((resolve) => setTimeout(resolve, 500))
-  return [...mockProjects]
-}
+export const fetchProjects = async (): Promise<Project[]> => {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data as Project[];
+};
 
 // Fetch time entries for a specific date
 export async function fetchTimeEntries(date: Date): Promise<TimeEntry[]> {
-  // Simulate API call delay
-  await new Promise((resolve) => setTimeout(resolve, 800))
-  return generateMockTimeEntries(date)
+  const { data, error } = await supabase
+    .from("timesheets")
+    .select("*")
+    .eq("date", date.toISOString().split("T")[0])
+
+  if (error) {
+    console.error("Supabase fetch error:", error)
+    return []
+  }
+
+  return data as TimeEntry[]
 }
 
 // Fetch timesheet data for a date range
 export async function fetchTimesheetData(startDate: Date, endDate: Date, workerId?: string): Promise<TimesheetEntry[]> {
-  // Simulate API call delay
-  await new Promise((resolve) => setTimeout(resolve, 1000))
+  const query = supabase
+    .from("timesheets")
+    .select(`
+      id,
+      worker_id,
+      worker_name,
+      date,
+      hours,
+      is_absent,
+      project_id,
+      project_name
+    `)
+    .gte("date", startDate.toISOString())
+    .lte("date", endDate.toISOString())
 
-  let result: TimesheetEntry[] = []
-  let currentDate = startDate
-
-  while (currentDate <= endDate) {
-    const entries = generateMockTimeEntries(currentDate)
-
-    // Filter by worker ID if provided
-    const filteredEntries = workerId ? entries.filter((entry) => entry.worker_id === workerId) : entries
-
-    // Convert to timesheet entries
-    const timesheetEntries = filteredEntries.map((entry) => ({
-      worker_id: entry.worker_id,
-      worker_name: entry.worker_name,
-      date: entry.date,
-      hours: entry.hours,
-      is_absent: entry.is_absent,
-      project_id: entry.project_id,
-      project_name: entry.project_name,
-    }))
-
-    result = [...result, ...timesheetEntries]
-    currentDate = addDays(currentDate, 1)
+  if (workerId) {
+    query.eq("worker_id", workerId)
   }
 
-  return result
+  const { data, error } = await query
+
+  if (error) {
+    console.error("Supabase error:", error)
+    throw new Error(error.message)
+  }
+
+  return data as TimesheetEntry[]
 }
 
 // Generate timesheet data for export

@@ -6,6 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { supabase } from "@/lib/supabaseClient"
 
 import { useState, useEffect } from "react";
 import {
@@ -66,37 +67,68 @@ export default function ProjectsPage() {
   };
 
   const handleCreateProject = async (project: Omit<Project, "id">) => {
-    // In a real app, this would be an API call to create a project
-    const newProject = {
-      id: Date.now().toString(),
-      ...project,
-    };
-    setProjects([...projects, newProject]);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+  
+    if (!user) return;
+  
+    const { data, error } = await supabase
+      .from("projects")
+      .insert([{ ...project, user_id: user.id }])
+      .select()
+      .single();
+  
+    if (error) {
+      console.error("Create failed:", error);
+      return;
+    }
+  
+    setProjects([...projects, data]);
     setIsFormOpen(false);
   };
 
   const handleUpdateProject = async (project: Project) => {
-    // In a real app, this would be an API call to update a project
-    setProjects(projects.map((p) => (p.id === project.id ? project : p)));
+    const { data, error } = await supabase
+      .from("projects")
+      .update(project)
+      .eq("id", project.id)
+      .select()
+      .single();
+    if (error) {
+      console.error("Update failed:", error);
+      return;
+    }
+    setProjects(projects.map((p) => (p.id === data.id ? data : p)));
     setSelectedProject(null);
     setIsFormOpen(false);
   };
 
   const handleDeleteProject = async () => {
     if (!selectedProject) return;
-
-    // In a real app, this would be an API call to delete a project
+    const { error } = await supabase.from("projects").delete().eq("id", selectedProject.id);
+    if (error) {
+      console.error("Delete failed:", error);
+      return;
+    }
     setProjects(projects.filter((p) => p.id !== selectedProject.id));
     setSelectedProject(null);
     setIsDeleteDialogOpen(false);
   };
 
   const handleToggleActive = async (project: Project) => {
-    // In a real app, this would be an API call to update a project's active status
-    const updatedProject = { ...project, active: !project.active };
-    setProjects(
-      projects.map((p) => (p.id === project.id ? updatedProject : p))
-    );
+    const updated = { ...project, active: !project.active };
+    const { data, error } = await supabase
+      .from("projects")
+      .update({ active: updated.active })
+      .eq("id", updated.id)
+      .select()
+      .single();
+    if (error) {
+      console.error("Toggle failed:", error);
+      return;
+    }
+    setProjects(projects.map((p) => (p.id === data.id ? data : p)));
   };
   return (
     <SidebarProvider

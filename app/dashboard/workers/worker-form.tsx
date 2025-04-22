@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -22,6 +22,13 @@ export function WorkerForm({ worker, onSubmit, onCancel }: WorkerFormProps) {
   const [active, setActive] = useState(worker?.active ?? true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    setName(worker?.name || "");
+    setEmail(worker?.email || "");
+    setHourlyRate(worker?.hourly_rate?.toString() || "");
+    setActive(worker?.active ?? true);
+  }, [worker]);
 
   const validate = () => {
     const newErrors: Record<string, string> = {}

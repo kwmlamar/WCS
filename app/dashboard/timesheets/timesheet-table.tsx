@@ -1,8 +1,9 @@
-"use client"
+'use client'
 
 import { useState, useEffect } from "react"
 import { format, addDays, isSameDay } from "date-fns"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { supabase } from "@/lib/supabaseClient" // Import Supabase client
 import { fetchTimesheetData } from "@/lib/data"
 import type { TimesheetEntry } from "@/lib/types"
 
@@ -31,6 +32,48 @@ export function TimesheetTable({ startDate, endDate, workerId }: TimesheetTableP
 
     loadData()
   }, [startDate, endDate, workerId])
+
+  const saveTimeEntry = async (entry: TimesheetEntry) => {
+    const { data, error } = await supabase
+      .from("timesheets")
+      .upsert([entry], { onConflict: ["worker_id", "date"] }) // Replace with your actual constraints
+
+    if (error) {
+      console.error("Failed to save timesheet entry:", error.message)
+    } else {
+      console.log("Entry saved successfully:", data)
+    }
+  }
+
+  // Handle changing hours in editable cells
+  const handleHoursChange = (workerId: string, dayIndex: number, newHours: number) => {
+    const updatedData = data.map((entry) => 
+      entry.worker_id === workerId && isSameDay(new Date(entry.date), addDays(startDate, dayIndex))
+        ? { ...entry, hours: newHours }
+        : entry
+    )
+    
+    if (!updatedData.some((entry) => entry.worker_id === workerId && isSameDay(new Date(entry.date), addDays(startDate, dayIndex)))) {
+      // If no entry exists for the day, create a new one
+      const newEntry: TimesheetEntry = {
+        worker_id: workerId,
+        date: format(addDays(startDate, dayIndex), "yyyy-MM-dd"),
+        hours: newHours,
+        worker_name: "Mitch", // Use actual worker name if available
+      }
+      updatedData.push(newEntry)
+    }
+
+    setData(updatedData)
+
+    // Update Supabase
+    const updatedEntry = updatedData.find(
+      (entry) => entry.worker_id === workerId && isSameDay(new Date(entry.date), addDays(startDate, dayIndex))
+    )
+    if (updatedEntry) {
+      saveTimeEntry(updatedEntry)
+    }
+  }
 
   // Generate array of dates for the week
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(startDate, i))
@@ -104,10 +147,19 @@ export function TimesheetTable({ startDate, endDate, workerId }: TimesheetTableP
                         entry.is_absent ? (
                           <span className="text-muted-foreground">Absent</span>
                         ) : (
-                          <span>{entry.hours?.toFixed(1) || "—"}</span>
+                          <input
+                            type="number"
+                            value={entry.hours || ""}
+                            onChange={(e) => handleHoursChange(worker.worker_id, index, parseFloat(e.target.value))}
+                            className="w-16 text-center"
+                          />
                         )
                       ) : (
-                        "—"
+                        <input
+                          type="number"
+                          onChange={(e) => handleHoursChange(worker.worker_id, index, parseFloat(e.target.value))}
+                          className="w-16 text-center"
+                        />
                       )}
                     </TableCell>
                   )
