@@ -3,18 +3,25 @@
 import { useState, useEffect } from "react"
 import { format, addDays, isSameDay } from "date-fns"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { fetchTimesheetData } from "@/lib/data"
+import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
+import { fetchTimesheetData, updateTimeEntry } from "@/lib/data"
+import { toast } from "@/hooks/use-toast"
 import type { TimesheetEntry } from "@/lib/types"
 
 interface TimesheetTableProps {
   startDate: Date
   endDate: Date
   workerId?: string
+  onDataChange?: () => void
 }
 
-export function TimesheetTable({ startDate, endDate, workerId }: TimesheetTableProps) {
+export function TimesheetTable({ startDate, endDate, workerId, onDataChange }: TimesheetTableProps) {
   const [data, setData] = useState<TimesheetEntry[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [editingCell, setEditingCell] = useState<{ workerId: string; dayIndex: number } | null>(null)
+  const [selectedRows, setSelectedRows] = useState<{ [key: string]: boolean }>({})
+  const [pendingUpdates, setPendingUpdates] = useState<{ [key: string]: boolean }>({})
 
   useEffect(() => {
     const loadData = async () => {
@@ -24,6 +31,11 @@ export function TimesheetTable({ startDate, endDate, workerId }: TimesheetTableP
         setData(timesheetData)
       } catch (error) {
         console.error("Failed to fetch timesheet data:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load timesheet data. Please try again.",
+          variant: "destructive",
+        })
       } finally {
         setIsLoading(false)
       }
@@ -61,6 +73,121 @@ export function TimesheetTable({ startDate, endDate, workerId }: TimesheetTableP
     {} as Record<string, any>,
   )
 
+  const handleHoursChange = async (workerId: string, dayIndex: number, newHoursStr: string) => {
+    // Parse the input value
+    const newHours = newHoursStr === "" ? null : Number.parseFloat(newHoursStr)
+
+    // Validate input
+    if (newHoursStr !== "" && (isNaN(newHours!) || newHours! < 0 || newHours! > 24)) {
+      toast({
+        title: "Invalid input",
+        description: "Hours must be between 0 and 24",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Create a unique key for this update
+    const updateKey = `${workerId}-${dayIndex}`
+
+    // Mark this cell as updating
+    setPendingUpdates((prev) => ({ ...prev, [updateKey]: true }))
+
+    try {
+      // Get the date for this day
+      const date = format(weekDays[dayIndex], "yyyy-MM-dd")
+
+      // Update the time entry in the database
+      await updateTimeEntry({
+        worker_id: workerId,
+        date,
+        hours: newHours,
+      })
+
+      // Update local state to reflect the change
+      const updatedData = [...data]
+
+      // Find if there's an existing entry for this worker and day
+      const existingEntryIndex = updatedData.findIndex(
+        (entry) => entry.worker_id === workerId && isSameDay(new Date(entry.date), weekDays[dayIndex]),
+      )
+
+      if (existingEntryIndex >= 0) {
+        // Update existing entry
+        updatedData[existingEntryIndex] = {
+          ...updatedData[existingEntryIndex],
+          hours: newHours,
+          is_absent: newHours === null || newHours === 0,
+        }
+      } else {
+        // Create new entry
+        const worker = Object.values(workerData).find((w) => w.worker_id === workerId)
+        updatedData.push({
+          worker_id: workerId,
+          worker_name: worker.worker_name,
+          date: format(weekDays[dayIndex], "yyyy-MM-dd"),
+          hours: newHours,
+          is_absent: newHours === null || newHours === 0,
+          project_id: null,
+          project_name: null,
+        })
+      }
+
+      setData(updatedData)
+
+      // Notify parent component that data has changed
+      if (onDataChange) {
+        onDataChange()
+      }
+
+      toast({
+        title: "Hours updated",
+        description: "The timesheet has been updated successfully.",
+      })
+    } catch (error) {
+      console.error("Failed to update hours:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update hours. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      // Clear the updating state
+      setPendingUpdates((prev) => ({ ...prev, [updateKey]: false }))
+      setEditingCell(null)
+    }
+  }
+
+  const toggleSelectRow = (workerId: string) => {
+    setSelectedRows((prev) => ({
+      ...prev,
+      [workerId]: !prev[workerId],
+    }))
+  }
+
+  const toggleSelectAll = () => {
+    const allWorkerIds = Object.keys(workerData)
+    const allSelected = allWorkerIds.every((id) => selectedRows[id])
+
+    if (allSelected) {
+      // Deselect all
+      setSelectedRows({})
+    } else {
+      // Select all
+      const newSelected: { [key: string]: boolean } = {}
+      allWorkerIds.forEach((id) => {
+        newSelected[id] = true
+      })
+      setSelectedRows(newSelected)
+    }
+  }
+
+  const getSelectedWorkerIds = () => {
+    return Object.entries(selectedRows)
+      .filter(([_, isSelected]) => isSelected)
+      .map(([workerId]) => workerId)
+  }
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -74,6 +201,13 @@ export function TimesheetTable({ startDate, endDate, workerId }: TimesheetTableP
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-[50px]">
+              <Checkbox
+                checked={Object.keys(workerData).length > 0 && Object.keys(workerData).every((id) => selectedRows[id])}
+                onCheckedChange={toggleSelectAll}
+                aria-label="Select all"
+              />
+            </TableHead>
             <TableHead className="min-w-[150px]">Worker</TableHead>
             {weekDays.map((day, index) => (
               <TableHead key={index} className="min-w-[100px] text-center">
@@ -95,19 +229,54 @@ export function TimesheetTable({ startDate, endDate, workerId }: TimesheetTableP
           ) : (
             Object.values(workerData).map((worker: any) => (
               <TableRow key={worker.worker_id}>
+                <TableCell>
+                  <Checkbox
+                    checked={!!selectedRows[worker.worker_id]}
+                    onCheckedChange={() => toggleSelectRow(worker.worker_id)}
+                    aria-label={`Select ${worker.worker_name}`}
+                  />
+                </TableCell>
                 <TableCell className="font-medium">{worker.worker_name}</TableCell>
                 {weekDays.map((day, index) => {
                   const entry = worker.days[index]
+                  const isEditing = editingCell?.workerId === worker.worker_id && editingCell?.dayIndex === index
+                  const isUpdating = pendingUpdates[`${worker.worker_id}-${index}`]
+
                   return (
-                    <TableCell key={index} className="text-center">
-                      {entry ? (
-                        entry.is_absent ? (
+                    <TableCell key={index} className="text-center p-0">
+                      {entry?.is_absent ? (
+                        <div className="p-4">
                           <span className="text-muted-foreground">Absent</span>
-                        ) : (
-                          <span>{entry.hours?.toFixed(1) || "—"}</span>
-                        )
+                        </div>
+                      ) : isEditing ? (
+                        <Input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max="24"
+                          className="w-16 h-8 text-center mx-auto"
+                          defaultValue={entry?.hours?.toString() || ""}
+                          autoFocus
+                          onBlur={(e) => handleHoursChange(worker.worker_id, index, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              handleHoursChange(worker.worker_id, index, e.currentTarget.value)
+                            } else if (e.key === "Escape") {
+                              setEditingCell(null)
+                            }
+                          }}
+                        />
                       ) : (
-                        "—"
+                        <div
+                          className="p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+                          onClick={() => setEditingCell({ workerId: worker.worker_id, dayIndex: index })}
+                        >
+                          {isUpdating ? (
+                            <span className="text-muted-foreground">Saving...</span>
+                          ) : (
+                            <span>{entry?.hours?.toFixed(1) || "—"}</span>
+                          )}
+                        </div>
                       )}
                     </TableCell>
                   )

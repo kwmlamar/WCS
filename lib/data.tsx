@@ -1,4 +1,12 @@
-import type { Worker, Project, TimeEntry, TimesheetEntry, PayrollEntry, PayrollSettings } from "./types"
+import type {
+  Worker,
+  Project,
+  TimeEntry,
+  TimesheetEntry,
+  PayrollEntry,
+  PayrollSettings,
+  WorkdaySettings,
+} from "./types"
 import { format, addDays, differenceInDays, parseISO } from "date-fns"
 
 // Mock data for workers
@@ -16,6 +24,17 @@ const mockProjects: Project[] = [
   { id: "3", name: "Site C", description: "Maintenance at Site C", active: false },
 ]
 
+// Mock workday settings
+const mockWorkdaySettings: WorkdaySettings = {
+  monday: true,
+  tuesday: true,
+  wednesday: true,
+  thursday: true,
+  friday: true,
+  saturday: false,
+  sunday: false,
+}
+
 // Mock payroll settings
 const mockPayrollSettings: PayrollSettings = {
   overtime_threshold: 40, // Hours per week
@@ -23,6 +42,9 @@ const mockPayrollSettings: PayrollSettings = {
   tax_rate: 0.2, // 20% tax
   default_deductions: 0.05, // 5% for benefits, insurance, etc.
 }
+
+// Mock time entries storage
+let mockTimeEntries: TimeEntry[] = []
 
 // Mock payroll entries
 const mockPayrollEntries: PayrollEntry[] = []
@@ -32,7 +54,14 @@ function generateMockTimeEntries(date: Date): TimeEntry[] {
   const dateStr = format(date, "yyyy-MM-dd")
   const isWeekend = [0, 6].includes(date.getDay()) // 0 = Sunday, 6 = Saturday
 
-  return mockWorkers
+  // Check if we already have entries for this date
+  const existingEntries = mockTimeEntries.filter((entry) => entry.date === dateStr)
+  if (existingEntries.length > 0) {
+    return existingEntries
+  }
+
+  // Generate new entries
+  const newEntries = mockWorkers
     .filter((worker) => worker.active)
     .map((worker) => {
       // Randomly determine if worker is absent (more likely on weekends)
@@ -88,6 +117,11 @@ function generateMockTimeEntries(date: Date): TimeEntry[] {
         is_auto: true,
       }
     })
+
+  // Add to our mock storage
+  mockTimeEntries = [...mockTimeEntries, ...newEntries]
+
+  return newEntries
 }
 
 // Fetch workers
@@ -109,6 +143,49 @@ export async function fetchTimeEntries(date: Date): Promise<TimeEntry[]> {
   // Simulate API call delay
   await new Promise((resolve) => setTimeout(resolve, 800))
   return generateMockTimeEntries(date)
+}
+
+// Update a time entry
+export async function updateTimeEntry(
+  entry: Partial<TimeEntry> & { worker_id: string; date: string },
+): Promise<TimeEntry> {
+  // Simulate API call delay
+  await new Promise((resolve) => setTimeout(resolve, 600))
+
+  // Find the entry to update
+  const entryId = entry.id || `${entry.date}-${entry.worker_id}`
+  const existingEntryIndex = mockTimeEntries.findIndex((e) => e.id === entryId)
+
+  if (existingEntryIndex >= 0) {
+    // Update existing entry
+    mockTimeEntries[existingEntryIndex] = {
+      ...mockTimeEntries[existingEntryIndex],
+      ...entry,
+    }
+
+    return mockTimeEntries[existingEntryIndex]
+  } else {
+    // Create new entry
+    const worker = mockWorkers.find((w) => w.id === entry.worker_id)
+    if (!worker) throw new Error("Worker not found")
+
+    const newEntry: TimeEntry = {
+      id: entryId,
+      worker_id: entry.worker_id,
+      worker_name: worker.name,
+      project_id: entry.project_id || null,
+      project_name: entry.project_name || null,
+      date: entry.date,
+      clock_in: entry.clock_in || null,
+      clock_out: entry.clock_out || null,
+      hours: entry.hours || null,
+      is_absent: entry.is_absent || false,
+      is_auto: entry.is_auto || false,
+    }
+
+    mockTimeEntries.push(newEntry)
+    return newEntry
+  }
 }
 
 // Fetch timesheet data for a date range
@@ -175,6 +252,117 @@ export async function generateTimesheet(startDate: Date, endDate: Date, workerId
   })
 
   return result
+}
+
+// Get workday settings
+export async function getWorkdaySettings(): Promise<WorkdaySettings> {
+  // Simulate API call delay
+  await new Promise((resolve) => setTimeout(resolve, 500))
+  return { ...mockWorkdaySettings }
+}
+
+// Update workday settings
+export async function updateWorkdaySettings(settings: WorkdaySettings): Promise<WorkdaySettings> {
+  // Simulate API call delay
+  await new Promise((resolve) => setTimeout(resolve, 800))
+
+  // Update mock settings
+  Object.assign(mockWorkdaySettings, settings)
+
+  return { ...mockWorkdaySettings }
+}
+
+// Generate timesheets for a week
+export async function generateTimesheetsForWeek(
+  startDate: Date,
+  endDate: Date,
+  workdaySettings: WorkdaySettings,
+): Promise<void> {
+  // Simulate API call delay
+  await new Promise((resolve) => setTimeout(resolve, 1500))
+
+  // Get active workers
+  const activeWorkers = mockWorkers.filter((worker) => worker.active)
+
+  // Generate time entries for each day in the range
+  let currentDate = new Date(startDate)
+
+  while (currentDate <= endDate) {
+    const day = format(currentDate, "EEEE").toLowerCase() as keyof WorkdaySettings
+
+    // Check if this day is a workday
+    if (workdaySettings[day]) {
+      const dateStr = format(currentDate, "yyyy-MM-dd")
+
+      // Generate entries for each worker
+      for (const worker of activeWorkers) {
+        // Check if an entry already exists
+        const existingEntry = mockTimeEntries.find((entry) => entry.date === dateStr && entry.worker_id === worker.id)
+
+        if (!existingEntry) {
+          // Create a new entry with 8 hours
+          const clockInDate = new Date(currentDate)
+          clockInDate.setHours(9, 0, 0, 0)
+
+          const clockOutDate = new Date(currentDate)
+          clockOutDate.setHours(17, 0, 0, 0)
+
+          const newEntry: TimeEntry = {
+            id: `${dateStr}-${worker.id}`,
+            worker_id: worker.id,
+            worker_name: worker.name,
+            project_id: null,
+            project_name: null,
+            date: dateStr,
+            clock_in: clockInDate.toISOString(),
+            clock_out: clockOutDate.toISOString(),
+            hours: 8,
+            is_absent: false,
+            is_auto: false,
+          }
+
+          mockTimeEntries.push(newEntry)
+        }
+      }
+    }
+
+    // Move to the next day
+    currentDate = addDays(currentDate, 1)
+  }
+}
+
+// Bulk update hours for selected entries
+export async function bulkUpdateHours(
+  startDate: Date,
+  endDate: Date,
+  hours: number,
+  workerIds?: string[],
+): Promise<void> {
+  // Simulate API call delay
+  await new Promise((resolve) => setTimeout(resolve, 1200))
+
+  // Get all entries in the date range
+  let entriesToUpdate = mockTimeEntries.filter((entry) => {
+    const entryDate = new Date(entry.date)
+    return entryDate >= startDate && entryDate <= endDate
+  })
+
+  // Filter by worker IDs if provided
+  if (workerIds && workerIds.length > 0) {
+    entriesToUpdate = entriesToUpdate.filter((entry) => workerIds.includes(entry.worker_id))
+  }
+
+  // Update each entry
+  for (const entry of entriesToUpdate) {
+    const entryIndex = mockTimeEntries.findIndex((e) => e.id === entry.id)
+    if (entryIndex >= 0) {
+      mockTimeEntries[entryIndex] = {
+        ...mockTimeEntries[entryIndex],
+        hours,
+        is_absent: false,
+      }
+    }
+  }
 }
 
 // Fetch payroll settings

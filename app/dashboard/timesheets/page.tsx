@@ -7,7 +7,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -23,29 +23,125 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { TimesheetTable } from "./timesheet-table";
+
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   CalendarIcon,
   Download,
   ChevronLeft,
   ChevronRight,
   FileText,
+  Plus,
+  RefreshCw,
 } from "lucide-react";
-import { TimesheetTable } from "./timesheet-table";
-import { generateTimesheet } from "@/lib/data";
-import type { Worker } from "@/lib/types";
+import {
+  fetchWorkers,
+  generateTimesheet,
+  generateTimesheetsForWeek,
+  fetchTimesheetData,
+  bulkUpdateHours,
+  getWorkdaySettings,
+} from "@/lib/data";
+import { toast } from "@/hooks/use-toast";
+import type { Worker, WorkdaySettings } from "@/lib/types";
 
 export default function TimesheetsPage() {
   const [date, setDate] = useState<Date>(new Date());
   const [selectedWorker, setSelectedWorker] = useState<string>("all");
   const [isLoading, setIsLoading] = useState(false);
-  const [workers, setWorkers] = useState<Worker[]>([
-    { id: "1", name: "John Doe", email: "john@example.com", active: true, hourly_rate: 12 },
-    { id: "2", name: "Jane Smith", email: "jane@example.com", active: true, hourly_rate: 12 },
-    { id: "3", name: "Bob Johnson", email: "bob@example.com", active: true, hourly_rate: 12 },
-  ]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [customHours, setCustomHours] = useState<string>("8");
+  const [isCustomHoursDialogOpen, setIsCustomHoursDialogOpen] = useState(false);
+  const [workdaySettings, setWorkdaySettings] = useState<WorkdaySettings>({
+    monday: true,
+    tuesday: true,
+    wednesday: true,
+    thursday: true,
+    friday: true,
+    saturday: false,
+    sunday: false,
+  });
+  const [timesheetStats, setTimesheetStats] = useState({
+    totalHours: 0,
+    averageDailyHours: 0,
+    absences: 0,
+    overtimeHours: 0,
+  });
 
   const weekStart = startOfWeek(date, { weekStartsOn: 1 }); // Monday
   const weekEnd = endOfWeek(date, { weekStartsOn: 1 }); // Sunday
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Load workers
+        const workersData = await fetchWorkers();
+        setWorkers(workersData);
+
+        // Load workday settings
+        const settings = await getWorkdaySettings();
+        setWorkdaySettings(settings);
+
+        // Load timesheet stats
+        await loadTimesheetStats();
+      } catch (error) {
+        console.error("Failed to load data:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load data. Please try again.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    loadData();
+  }, []);
+
+  const loadTimesheetStats = async () => {
+    try {
+      const timesheetData = await fetchTimesheetData(
+        weekStart,
+        weekEnd,
+        selectedWorker === "all" ? undefined : selectedWorker
+      );
+
+      // Calculate stats
+      const totalHours = timesheetData.reduce(
+        (sum, entry) => sum + (entry.hours || 0),
+        0
+      );
+      const absences = timesheetData.filter((entry) => entry.is_absent).length;
+      const workingDays = Object.values(workdaySettings).filter(Boolean).length;
+      const activeWorkers =
+        selectedWorker === "all" ? workers.filter((w) => w.active).length : 1;
+      const expectedHours = workingDays * activeWorkers * 8;
+      const overtimeHours = Math.max(0, totalHours - expectedHours);
+      const averageDailyHours =
+        activeWorkers > 0 && workingDays > 0
+          ? totalHours / (activeWorkers * workingDays)
+          : 0;
+
+      setTimesheetStats({
+        totalHours,
+        averageDailyHours,
+        absences,
+        overtimeHours,
+      });
+    } catch (error) {
+      console.error("Failed to load timesheet stats:", error);
+    }
+  };
 
   const handlePreviousWeek = () => {
     setDate(subWeeks(date, 1));
@@ -58,9 +154,6 @@ export default function TimesheetsPage() {
   const handleExportTimesheet = async () => {
     setIsLoading(true);
     try {
-      // In a real app, this would call an API to generate a PDF or CSV
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
-
       // Create a CSV string
       const timesheet = await generateTimesheet(
         weekStart,
@@ -82,11 +175,116 @@ export default function TimesheetsPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+
+      toast({
+        title: "Export successful",
+        description: "Timesheet has been exported successfully.",
+      });
     } catch (error) {
       console.error("Failed to export timesheet:", error);
+      toast({
+        title: "Export failed",
+        description: "Failed to export timesheet. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleGenerateTimesheets = async () => {
+    setIsGenerating(true);
+    try {
+      await generateTimesheetsForWeek(weekStart, weekEnd, workdaySettings);
+
+      toast({
+        title: "Timesheets generated",
+        description:
+          "Timesheets have been generated successfully for the selected week.",
+      });
+
+      // Refresh the data
+      await loadTimesheetStats();
+    } catch (error) {
+      console.error("Failed to generate timesheets:", error);
+      toast({
+        title: "Generation failed",
+        description: "Failed to generate timesheets. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleBulkUpdateToEightHours = async () => {
+    setIsBulkUpdating(true);
+    try {
+      await bulkUpdateHours(weekStart, weekEnd, 8);
+
+      toast({
+        title: "Hours updated",
+        description: "All selected entries have been updated to 8 hours.",
+      });
+
+      // Refresh the data
+      await loadTimesheetStats();
+    } catch (error) {
+      console.error("Failed to update hours:", error);
+      toast({
+        title: "Update failed",
+        description: "Failed to update hours. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBulkUpdating(false);
+    }
+  };
+
+  const handleBulkUpdateToCustomHours = async () => {
+    const hours = Number.parseFloat(customHours);
+
+    if (isNaN(hours) || hours < 0 || hours > 24) {
+      toast({
+        title: "Invalid input",
+        description: "Hours must be between 0 and 24",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsBulkUpdating(true);
+    setIsCustomHoursDialogOpen(false);
+
+    try {
+      await bulkUpdateHours(weekStart, weekEnd, hours);
+
+      toast({
+        title: "Hours updated",
+        description: `All selected entries have been updated to ${hours} hours.`,
+      });
+
+      // Refresh the data
+      await loadTimesheetStats();
+    } catch (error) {
+      console.error("Failed to update hours:", error);
+      toast({
+        title: "Update failed",
+        description: "Failed to update hours. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBulkUpdating(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    await loadTimesheetStats();
+
+    toast({
+      title: "Refreshed",
+      description: "Timesheet data has been refreshed.",
+    });
   };
 
   return (
@@ -120,6 +318,8 @@ export default function TimesheetsPage() {
             </div>
           </div>
         </header>
+
+        {/* Timesheet table*/}
         <div className="space-y-6 px-4 md:px-6 lg:px-8 pt-6">
           <div className="flex justify-between items-center">
             <h2 className="text-3xl font-bold tracking-tight">Timesheets</h2>
@@ -186,10 +386,47 @@ export default function TimesheetsPage() {
               </div>
             </CardHeader>
             <CardContent>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleGenerateTimesheets}
+                    disabled={isGenerating}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    {isGenerating ? "Generating..." : "Generate Timesheets"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleBulkUpdateToEightHours}
+                    disabled={isBulkUpdating}
+                  >
+                    Set Selected to 8 Hours
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsCustomHoursDialogOpen(true)}
+                    disabled={isBulkUpdating}
+                  >
+                    Set Custom Hours
+                  </Button>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRefresh}
+                  className="ml-auto"
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh
+                </Button>
+              </div>
+
               <TimesheetTable
                 startDate={weekStart}
                 endDate={weekEnd}
                 workerId={selectedWorker === "all" ? undefined : selectedWorker}
+                onDataChange={loadTimesheetStats}
               />
             </CardContent>
           </Card>
@@ -204,7 +441,9 @@ export default function TimesheetsPage() {
                 <FileText className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">160</div>
+                <div className="text-2xl font-bold">
+                  {timesheetStats.totalHours.toFixed(1)}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   For selected period
                 </p>
@@ -218,7 +457,9 @@ export default function TimesheetsPage() {
                 <FileText className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">8.0</div>
+                <div className="text-2xl font-bold">
+                  {timesheetStats.averageDailyHours.toFixed(1)}
+                </div>
                 <p className="text-xs text-muted-foreground">Per worker</p>
               </CardContent>
             </Card>
@@ -228,7 +469,9 @@ export default function TimesheetsPage() {
                 <FileText className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">2</div>
+                <div className="text-2xl font-bold">
+                  {timesheetStats.absences}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   For selected period
                 </p>
@@ -242,13 +485,55 @@ export default function TimesheetsPage() {
                 <FileText className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">12</div>
+                <div className="text-2xl font-bold">
+                  {timesheetStats.overtimeHours.toFixed(1)}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   For selected period
                 </p>
               </CardContent>
             </Card>
           </div>
+
+          {/* Custom Hours Dialog */}
+          <Dialog
+            open={isCustomHoursDialogOpen}
+            onOpenChange={setIsCustomHoursDialogOpen}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Set Custom Hours</DialogTitle>
+                <DialogDescription>
+                  Enter the number of hours to apply to all selected entries.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4">
+                <Input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max="24"
+                  value={customHours}
+                  onChange={(e) => setCustomHours(e.target.value)}
+                  placeholder="Enter hours (e.g., 8.5)"
+                />
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsCustomHoursDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleBulkUpdateToCustomHours}
+                  disabled={isBulkUpdating}
+                >
+                  {isBulkUpdating ? "Updating..." : "Apply"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </SidebarInset>
     </SidebarProvider>
