@@ -9,8 +9,9 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { TimeInput } from "../time-input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { TimeEntry, Project } from "@/lib/types"
 import { fetchProjects } from "@/lib/data"
+import { toast } from "@/hooks/use-toast"
+import type { TimeEntry, Project } from "@/lib/types"
 
 interface TimeEntryFormProps {
   entry: TimeEntry
@@ -26,14 +27,23 @@ export function TimeEntryForm({ entry, onSubmit, onCancel }: TimeEntryFormProps)
   const [isAuto, setIsAuto] = useState(entry.is_auto || false)
   const [projects, setProjects] = useState<Project[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     const loadProjects = async () => {
+      setIsLoading(true)
       try {
         const data = await fetchProjects()
         setProjects(data)
       } catch (error) {
         console.error("Failed to fetch projects:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load projects. Please try again.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
       }
     }
 
@@ -69,12 +79,14 @@ export function TimeEntryForm({ entry, onSubmit, onCancel }: TimeEntryFormProps)
         hours = Math.round(hours * 10) / 10 // Round to 1 decimal place
       }
 
+      const selectedProject = projects.find((p) => p.id === projectId)
+
       const updatedEntry: TimeEntry = {
         ...entry,
         clock_in: clockInDate ? clockInDate.toISOString() : null,
         clock_out: clockOutDate ? clockOutDate.toISOString() : null,
-        project_id: isAbsent ? null : projectId,
-        project_name: isAbsent ? null : projects.find((p) => p.id === projectId)?.name || null,
+        project_id: isAbsent ? null : projectId || null,
+        project_name: isAbsent ? null : selectedProject?.name || null,
         is_absent: isAbsent,
         is_auto: isAuto,
         hours: hours,
@@ -83,6 +95,11 @@ export function TimeEntryForm({ entry, onSubmit, onCancel }: TimeEntryFormProps)
       await onSubmit(updatedEntry)
     } catch (error) {
       console.error("Error submitting time entry form:", error)
+      toast({
+        title: "Error",
+        description: "Failed to save time entry. Please try again.",
+        variant: "destructive",
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -122,12 +139,12 @@ export function TimeEntryForm({ entry, onSubmit, onCancel }: TimeEntryFormProps)
 
           <div className="space-y-2">
             <Label htmlFor="project">Project</Label>
-            <Select value={projectId} onValueChange={setProjectId} disabled={isAbsent}>
+            <Select value={projectId} onValueChange={setProjectId} disabled={isAbsent || isLoading}>
               <SelectTrigger id="project">
-                <SelectValue placeholder="Select a project" />
+                <SelectValue placeholder={isLoading ? "Loading projects..." : "Select a project"} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">No Project</SelectItem>
+                <SelectItem value="no-project">No Project</SelectItem>
                 {projects.map((project) => (
                   <SelectItem key={project.id} value={project.id}>
                     {project.name}
@@ -145,7 +162,7 @@ export function TimeEntryForm({ entry, onSubmit, onCancel }: TimeEntryFormProps)
       )}
 
       <div className="flex justify-end space-x-2 pt-4">
-        <Button type="button" variant="outline" onClick={onCancel}>
+        <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
           Cancel
         </Button>
         <Button type="submit" disabled={isSubmitting}>

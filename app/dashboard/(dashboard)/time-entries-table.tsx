@@ -18,7 +18,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Edit, MoreHorizontal, Trash2, UserX } from "lucide-react"
+import { Edit, MoreHorizontal, Trash2, UserX, RefreshCw } from "lucide-react"
+import { updateTimeEntry, deleteTimeEntry } from "@/lib/data"
+import { toast } from "@/hooks/use-toast"
 import type { TimeEntry } from "@/lib/types"
 
 interface TimeEntriesTableProps {
@@ -32,6 +34,7 @@ export function TimeEntriesTable({ entries, isLoading, onRefresh }: TimeEntriesT
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isAbsentDialogOpen, setIsAbsentDialogOpen] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
 
   const handleEditEntry = (entry: TimeEntry) => {
     setSelectedEntry(entry)
@@ -49,37 +52,95 @@ export function TimeEntriesTable({ entries, isLoading, onRefresh }: TimeEntriesT
   }
 
   const handleSaveEntry = async (updatedEntry: TimeEntry) => {
-    // In a real app, this would be an API call to update the entry
-    console.log("Updating entry:", updatedEntry)
-    setIsEditDialogOpen(false)
-    onRefresh()
+    setIsProcessing(true)
+    try {
+      await updateTimeEntry(updatedEntry)
+      setIsEditDialogOpen(false)
+      toast({
+        title: "Success",
+        description: "Time entry updated successfully.",
+      })
+      onRefresh()
+    } catch (error) {
+      console.error("Error updating time entry:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update time entry. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   const confirmDelete = async () => {
-    // In a real app, this would be an API call to delete the entry
-    console.log("Deleting entry:", selectedEntry)
-    setIsDeleteDialogOpen(false)
-    onRefresh()
+    if (!selectedEntry) return
+
+    setIsProcessing(true)
+    try {
+      await deleteTimeEntry(selectedEntry.id)
+      setIsDeleteDialogOpen(false)
+      toast({
+        title: "Success",
+        description: "Time entry deleted successfully.",
+      })
+      onRefresh()
+    } catch (error) {
+      console.error("Error deleting time entry:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete time entry. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   const confirmMarkAbsent = async () => {
-    // In a real app, this would be an API call to mark the worker as absent
-    console.log("Marking worker as absent:", selectedEntry)
-    setIsAbsentDialogOpen(false)
-    onRefresh()
-  }
+    if (!selectedEntry) return
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <p>Loading time entries...</p>
-      </div>
-    )
+    setIsProcessing(true)
+    try {
+      const absentEntry = {
+        ...selectedEntry,
+        is_absent: true,
+        clock_in: null,
+        clock_out: null,
+        hours: null,
+        project_id: null,
+        project_name: null,
+      }
+
+      await updateTimeEntry(absentEntry)
+      setIsAbsentDialogOpen(false)
+      toast({
+        title: "Success",
+        description: "Worker marked as absent successfully.",
+      })
+      onRefresh()
+    } catch (error) {
+      console.error("Error marking worker as absent:", error)
+      toast({
+        title: "Error",
+        description: "Failed to mark worker as absent. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   return (
     <>
       <div className="rounded-md border">
+        <div className="flex justify-between items-center p-4">
+          <h3 className="text-lg font-medium">Time Entries</h3>
+          <Button variant="outline" size="sm" onClick={onRefresh} disabled={isLoading}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
         <Table>
           <TableHeader>
             <TableRow>
@@ -110,7 +171,7 @@ export function TimeEntriesTable({ entries, isLoading, onRefresh }: TimeEntriesT
                   <TableCell>
                     {entry.is_absent ? "—" : entry.clock_out ? format(new Date(entry.clock_out), "h:mm a") : "—"}
                   </TableCell>
-                  <TableCell>{entry.is_absent ? "—" : entry.hours || "—"}</TableCell>
+                  <TableCell>{entry.is_absent ? "—" : entry.hours?.toFixed(1) || "—"}</TableCell>
                   <TableCell>
                     {entry.is_absent ? (
                       <Badge variant="outline" className="bg-muted">
@@ -195,7 +256,9 @@ export function TimeEntriesTable({ entries, isLoading, onRefresh }: TimeEntriesT
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete}>Delete</AlertDialogAction>
+            <AlertDialogAction onClick={confirmDelete} disabled={isProcessing}>
+              {isProcessing ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -211,7 +274,9 @@ export function TimeEntriesTable({ entries, isLoading, onRefresh }: TimeEntriesT
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmMarkAbsent}>Mark Absent</AlertDialogAction>
+            <AlertDialogAction onClick={confirmMarkAbsent} disabled={isProcessing}>
+              {isProcessing ? "Processing..." : "Mark Absent"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

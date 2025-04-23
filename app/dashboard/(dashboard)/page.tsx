@@ -26,22 +26,38 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { TimeEntriesTable } from "./time-entries-table";
-import { fetchTimeEntries } from "@/lib/data";
-import type { TimeEntry } from "@/lib/types";
+import { fetchTimeEntries, fetchWorkers, fetchProjects } from "@/lib/data";
+import type { TimeEntry, Worker, Project } from "@/lib/types";
+import { toast } from "@/hooks/use-toast";
 
 export default function DashboardPage() {
   const [date, setDate] = useState<Date>(new Date());
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
       try {
+        // Load time entries for the selected date
         const entries = await fetchTimeEntries(date);
         setTimeEntries(entries);
+
+        // Load workers and projects for statistics
+        const workersData = await fetchWorkers();
+        setWorkers(workersData);
+
+        const projectsData = await fetchProjects();
+        setProjects(projectsData);
       } catch (error) {
-        console.error("Failed to fetch time entries:", error);
+        console.error("Failed to fetch data:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load dashboard data. Please try again.",
+          variant: "destructive",
+        });
       } finally {
         setIsLoading(false);
       }
@@ -52,6 +68,7 @@ export default function DashboardPage() {
 
   // Calculate summary statistics
   const activeWorkers = timeEntries.filter((entry) => !entry.is_absent).length;
+  const totalWorkers = workers.filter((worker) => worker.active).length;
   const totalProjects = [
     ...new Set(
       timeEntries
@@ -59,11 +76,34 @@ export default function DashboardPage() {
         .map((entry) => entry.project_id)
     ),
   ].length;
+  const activeProjects = projects.filter((project) => project.active).length;
   const autoEntries = timeEntries.filter((entry) => entry.is_auto).length;
   const manualEntries = timeEntries.filter((entry) => !entry.is_auto).length;
   const missingProjectEntries = timeEntries.filter(
     (entry) => !entry.project_id && !entry.is_absent
   ).length;
+
+  const handleRefresh = async () => {
+    try {
+      setIsLoading(true);
+      const entries = await fetchTimeEntries(date);
+      setTimeEntries(entries);
+      toast({
+        title: "Refreshed",
+        description: "Dashboard data has been refreshed.",
+      });
+    } catch (error) {
+      console.error("Failed to refresh data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh data. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <SidebarProvider
       style={
@@ -113,7 +153,7 @@ export default function DashboardPage() {
               <CardContent>
                 <div className="text-2xl font-bold">{activeWorkers}</div>
                 <p className="text-xs text-muted-foreground">
-                  {timeEntries.length} total workers
+                  {totalWorkers} total active workers
                 </p>
               </CardContent>
             </Card>
@@ -126,6 +166,9 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalProjects}</div>
+                <p className="text-xs text-muted-foreground">
+                  {activeProjects} total active projects
+                </p>
               </CardContent>
             </Card>
             <Card>
@@ -170,7 +213,7 @@ export default function DashboardPage() {
           <TimeEntriesTable
             entries={timeEntries}
             isLoading={isLoading}
-            onRefresh={() => fetchTimeEntries(date).then(setTimeEntries)}
+            onRefresh={handleRefresh}
           />
         </div>
       </SidebarInset>

@@ -30,9 +30,30 @@ import {
 import { TimeInput } from "../time-input";
 import { toast } from "@/hooks/use-toast";
 import { Clock, Save } from "lucide-react";
+import {
+  getClockInSettings,
+  updateClockInSettings,
+  type ClockInSettings,
+} from "@/lib/services/settings";
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<{
+    workdays: {
+      monday: boolean;
+      tuesday: boolean;
+      wednesday: boolean;
+      thursday: boolean;
+      friday: boolean;
+      saturday: boolean;
+      sunday: boolean;
+    };
+    defaultTimes: {
+      startTime: string;
+      endTime: string; // Add this line
+    };
+    autoClockIn: boolean;
+    timezone: string;
+  }>({
     workdays: {
       monday: true,
       tuesday: true,
@@ -43,21 +64,59 @@ export default function SettingsPage() {
       sunday: false,
     },
     defaultTimes: {
-      startTime: "07:00",
-      endTime: "16:00",
+      startTime: "09:00",
+      endTime: "17:00", // Add default end time (5:00 PM)
     },
     autoClockIn: true,
-    autoClockOut: true,
     timezone: "America/New_York",
   });
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const clockInSettings = await getClockInSettings();
+
+        setSettings({
+          workdays: clockInSettings.workdays,
+          defaultTimes: {
+            startTime: clockInSettings.default_time,
+            endTime: clockInSettings.default_end_time, // Add this line
+          },
+          autoClockIn: clockInSettings.auto_clock_in,
+          timezone: "America/New_York", // This could also come from settings
+        });
+      } catch (error) {
+        console.error("Failed to load settings:", error);
+        toast({
+          title: "Error loading settings",
+          description:
+            "There was an error loading your settings. Default values are shown.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadSettings();
+  }, []);
 
   const handleSaveSettings = async () => {
     setIsSaving(true);
     try {
-      // In a real app, this would be an API call to save settings
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
+      // Convert our UI settings to the format expected by the settings service
+      const clockInSettings: ClockInSettings = {
+        default_time: settings.defaultTimes.startTime,
+        default_end_time: settings.defaultTimes.endTime, // Add this line
+        auto_clock_in: settings.autoClockIn,
+        workdays: settings.workdays,
+      };
+
+      await updateClockInSettings(clockInSettings);
+
       toast({
         title: "Settings saved",
         description: "Your settings have been saved successfully.",
@@ -95,6 +154,13 @@ export default function SettingsPage() {
     });
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <p>Loading settings...</p>
+      </div>
+    );
+  }
   return (
     <SidebarProvider
       style={
@@ -237,7 +303,9 @@ export default function SettingsPage() {
                     </h3>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
-                        <Label htmlFor="start-time">Default Start Time</Label>
+                        <Label htmlFor="start-time">
+                          Default Clock-In Time
+                        </Label>
                         <TimeInput
                           id="start-time"
                           value={settings.defaultTimes.startTime}
@@ -245,9 +313,13 @@ export default function SettingsPage() {
                             handleTimeChange("startTime", value)
                           }
                         />
+                        <p className="text-sm text-muted-foreground mt-1">
+                          This time will be used for automatic clock-ins and as
+                          the default for manual entries.
+                        </p>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="end-time">Default End Time</Label>
+                        <Label htmlFor="end-time">Default Clock-Out Time</Label>
                         <TimeInput
                           id="end-time"
                           value={settings.defaultTimes.endTime}
@@ -255,6 +327,10 @@ export default function SettingsPage() {
                             handleTimeChange("endTime", value)
                           }
                         />
+                        <p className="text-sm text-muted-foreground mt-1">
+                          This time will be used for automatic clock-outs and as
+                          the default for manual entries.
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -290,27 +366,6 @@ export default function SettingsPage() {
                       checked={settings.autoClockIn}
                       onCheckedChange={(checked) =>
                         setSettings({ ...settings, autoClockIn: checked })
-                      }
-                    />
-                  </div>
-
-                  <Separator />
-
-                  <div className="flex items-center justify-between space-x-2">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="auto-clock-out">
-                        Automatic Clock-Out
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        Automatically clock out workers at the end of each
-                        workday.
-                      </p>
-                    </div>
-                    <Switch
-                      id="auto-clock-out"
-                      checked={settings.autoClockOut}
-                      onCheckedChange={(checked) =>
-                        setSettings({ ...settings, autoClockOut: checked })
                       }
                     />
                   </div>
