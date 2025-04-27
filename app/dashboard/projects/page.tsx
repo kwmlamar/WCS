@@ -42,6 +42,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+import { supabase } from "@/lib/supabaseClient";
+
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,8 +58,9 @@ export default function ProjectsPage() {
   const loadProjects = async () => {
     setIsLoading(true);
     try {
-      const data = await fetchProjects();
-      setProjects(data);
+      const { data, error } = await supabase.from("projects").select("*");
+      if (error) throw error;
+      setProjects(data || []);
     } catch (error) {
       console.error("Failed to fetch projects:", error);
     } finally {
@@ -66,37 +69,67 @@ export default function ProjectsPage() {
   };
 
   const handleCreateProject = async (project: Omit<Project, "id">) => {
-    // In a real app, this would be an API call to create a project
-    const newProject = {
-      id: Date.now().toString(),
-      ...project,
-    };
-    setProjects([...projects, newProject]);
+    try {
+      const { data, error } = await supabase
+        .from("projects")
+        .insert([project])
+        .select()
+        .single();
+      if (error) throw error;
+      setProjects([...projects, data]);
+    } catch (error) {
+      console.error("Failed to create project:", error);
+    }
     setIsFormOpen(false);
   };
 
   const handleUpdateProject = async (project: Project) => {
-    // In a real app, this would be an API call to update a project
-    setProjects(projects.map((p) => (p.id === project.id ? project : p)));
+    try {
+      const { data, error } = await supabase
+        .from("projects")
+        .update(project)
+        .eq("id", project.id)
+        .select()
+        .single();
+      if (error) throw error;
+      setProjects(projects.map((p) => (p.id === data.id ? data : p)));
+    } catch (error) {
+      console.error("Failed to update project:", error);
+    }
     setSelectedProject(null);
     setIsFormOpen(false);
   };
 
   const handleDeleteProject = async () => {
     if (!selectedProject) return;
-
-    // In a real app, this would be an API call to delete a project
-    setProjects(projects.filter((p) => p.id !== selectedProject.id));
+    try {
+      const { error } = await supabase
+        .from("projects")
+        .delete()
+        .eq("id", selectedProject.id);
+      if (error) throw error;
+      setProjects(projects.filter((p) => p.id !== selectedProject.id));
+    } catch (error) {
+      console.error("Failed to delete project:", error);
+    }
     setSelectedProject(null);
     setIsDeleteDialogOpen(false);
   };
 
   const handleToggleActive = async (project: Project) => {
-    // In a real app, this would be an API call to update a project's active status
     const updatedProject = { ...project, active: !project.active };
-    setProjects(
-      projects.map((p) => (p.id === project.id ? updatedProject : p))
-    );
+    try {
+      const { data, error } = await supabase
+        .from("projects")
+        .update({ active: updatedProject.active })
+        .eq("id", project.id)
+        .select()
+        .single();
+      if (error) throw error;
+      setProjects(projects.map((p) => (p.id === data.id ? data : p)));
+    } catch (error) {
+      console.error("Failed to toggle project active status:", error);
+    }
   };
   return (
     <SidebarProvider
@@ -130,7 +163,7 @@ export default function ProjectsPage() {
           </div>
         </header>
         {/* Insert Project Page */}
-        <div className="space-y-6 px-4 md:px-6 lg:px-8 pt-6">
+        <div className="space-y-6 px-4 md:px-6 lg:px-8 pt-6 pb-6">
           <div className="flex justify-between items-center">
             <h2 className="text-3xl font-bold tracking-tight">
               Projects Management

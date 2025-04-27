@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { supabase } from "@/lib/supabaseClient"
 import { format } from "date-fns"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
@@ -49,25 +50,73 @@ export function TimeEntriesTable({ entries, isLoading, onRefresh }: TimeEntriesT
   }
 
   const handleSaveEntry = async (updatedEntry: TimeEntry) => {
-    // In a real app, this would be an API call to update the entry
-    console.log("Updating entry:", updatedEntry)
-    setIsEditDialogOpen(false)
-    onRefresh()
-  }
+    if (!updatedEntry.id) return;
+  
+    const { error } = await supabase
+      .from("time_entries")
+      .update({
+        clock_in: updatedEntry.clock_in,
+        clock_out: updatedEntry.clock_out,
+        hours: updatedEntry.hours,
+        project_id: updatedEntry.project_id,
+        is_absent: updatedEntry.is_absent,
+        is_auto: updatedEntry.is_auto,
+      })
+      .eq("id", updatedEntry.id);
+  
+    if (error) {
+      console.error("Error updating time entry:", error);
+    } else {
+      console.log("Entry updated:", updatedEntry.id);
+    }
+  
+    setIsEditDialogOpen(false);
+    onRefresh();
+  };
+  
 
   const confirmDelete = async () => {
-    // In a real app, this would be an API call to delete the entry
-    console.log("Deleting entry:", selectedEntry)
-    setIsDeleteDialogOpen(false)
-    onRefresh()
-  }
+    if (!selectedEntry) return;
+  
+    const { error } = await supabase
+      .from("time_entries")
+      .delete()
+      .eq("id", selectedEntry.id);
+  
+    if (error) {
+      console.error("Error deleting time entry:", error);
+    } else {
+      console.log("Entry deleted:", selectedEntry.id);
+    }
+  
+    setIsDeleteDialogOpen(false);
+    onRefresh();
+  };
+  
 
   const confirmMarkAbsent = async () => {
-    // In a real app, this would be an API call to mark the worker as absent
-    console.log("Marking worker as absent:", selectedEntry)
-    setIsAbsentDialogOpen(false)
-    onRefresh()
-  }
+    if (!selectedEntry) return;
+  
+    const { error } = await supabase
+      .from("time_entries")
+      .update({
+        is_absent: true,
+        clock_in: null,
+        clock_out: null,
+        hours: null,
+      })
+      .eq("id", selectedEntry.id);
+  
+    if (error) {
+      console.error("Error marking worker absent:", error);
+    } else {
+      console.log("Worker marked absent:", selectedEntry.id);
+    }
+  
+    setIsAbsentDialogOpen(false);
+    onRefresh();
+  };
+  
 
   if (isLoading) {
     return (

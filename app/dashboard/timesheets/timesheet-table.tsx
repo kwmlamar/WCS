@@ -58,16 +58,15 @@ export function TimesheetTable({ startDate, endDate, workerId, onDataChange }: T
           total_hours: 0,
         }
       }
-
-      // Add entry to the appropriate day
+  
       const entryDate = new Date(entry.date)
-      weekDays.forEach((day, index) => {
-        if (isSameDay(entryDate, day)) {
-          acc[entry.worker_id].days[index] = entry
-          acc[entry.worker_id].total_hours += entry.hours || 0
-        }
-      })
-
+      const dayIndex = Math.floor((entryDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24) + 1)
+  
+      if (dayIndex >= 0 && dayIndex < 7) {
+        acc[entry.worker_id].days[dayIndex] = entry
+        acc[entry.worker_id].total_hours += entry.hours || 0
+      }
+  
       return acc
     },
     {} as Record<string, any>,
@@ -251,7 +250,7 @@ export function TimesheetTable({ startDate, endDate, workerId, onDataChange }: T
                       ) : isEditing ? (
                         <Input
                           type="number"
-                          step="0.5"
+                          step="1"
                           min="0"
                           max="24"
                           className="w-16 h-8 text-center mx-auto"
@@ -271,10 +270,13 @@ export function TimesheetTable({ startDate, endDate, workerId, onDataChange }: T
                           className="p-4 cursor-pointer hover:bg-muted/50 transition-colors"
                           onClick={() => setEditingCell({ workerId: worker.worker_id, dayIndex: index })}
                         >
-                          {isUpdating ? (
+                          {entry?.is_absent ? (
+                            <span className="text-muted-foreground">Absent</span>
+                          ) : isUpdating ? (
                             <span className="text-muted-foreground">Saving...</span>
                           ) : (
-                            <span>{entry?.hours?.toFixed(1) || "—"}</span>
+                            <span>{Number.isInteger(entry?.hours) ? entry.hours : entry?.hours?.toFixed(1) || "—"}</span>
+
                           )}
                         </div>
                       )}

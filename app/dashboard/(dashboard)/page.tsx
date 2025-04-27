@@ -319,7 +319,7 @@ export default function DashboardPage() {
       <SidebarInset>
         <SiteHeader />
         {/* Section Cards*/}
-        <div className="space-y-6 px-4 md:px-6 lg:px-8 pt-6">
+        <div className="space-y-6 px-4 md:px-6 lg:px-8 pt-6 pb-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <h2 className="text-3xl font-bold tracking-tight">
               {isToday(date)
@@ -353,7 +353,7 @@ export default function DashboardPage() {
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{activeWorkers}</div>
+                <div className="text-2xl font-bold">{totalWorkers}</div>
                 <p className="text-xs text-muted-foreground">
                   {totalWorkers} total active workers
                 </p>
@@ -562,7 +562,11 @@ export default function DashboardPage() {
                                 className="cursor-pointer hover:bg-muted/50 transition-colors p-2"
                                 onClick={() => setEditingEntry(entry.id)}
                               >
-                                {entry.hours?.toFixed(1) || "—"}
+                                {entry.hours != null
+                                  ? Number.isInteger(entry.hours)
+                                    ? entry.hours
+                                    : parseFloat(entry.hours.toFixed(1))
+                                  : "—"}
                               </div>
                             )}
                           </TableCell>

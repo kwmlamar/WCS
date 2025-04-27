@@ -9,10 +9,16 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import type { Worker } from "@/lib/types"
 
+interface Project {
+  id: string
+  name: string
+}
+
 interface WorkerFormProps {
   worker?: Worker | null
   onSubmit: (worker: Worker | Omit<Worker, "id">) => void
   onCancel: () => void
+  projects?: Project[]
 }
 
 export function WorkerForm({ worker, onSubmit, onCancel }: WorkerFormProps) {
@@ -22,6 +28,7 @@ export function WorkerForm({ worker, onSubmit, onCancel }: WorkerFormProps) {
   const [active, setActive] = useState(worker?.active ?? true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  
 
   const validate = () => {
     const newErrors: Record<string, string> = {}

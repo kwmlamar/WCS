@@ -1,6 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabaseClient";
+
+import { toast } from "@/hooks/use-toast";
+import { Loader2, Clock, Save } from "lucide-react";
+import { TimeInput } from "../time-input";
+
 import { AppSidebar } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -8,7 +14,6 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 import { Input } from "@/components/ui/input";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-
 import {
   Card,
   CardContent,
@@ -27,11 +32,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { TimeInput } from "../time-input";
-import { toast } from "@/hooks/use-toast";
-import { Clock, Save } from "lucide-react";
 
 export default function SettingsPage() {
+  console.log("SettingsPage component is rendering...");
   const [settings, setSettings] = useState({
     workdays: {
       monday: true,
@@ -39,25 +42,63 @@ export default function SettingsPage() {
       wednesday: true,
       thursday: true,
       friday: true,
-      saturday: false,
+      saturday: true,
       sunday: false,
     },
     defaultTimes: {
       startTime: "07:00",
       endTime: "16:00",
     },
-    autoClockIn: true,
-    autoClockOut: true,
+    autoClockIn: false,
+    autoClockOut: false,
     timezone: "America/New_York",
   });
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("settings")
+          .select("data")
+          .eq("type", "user_settings")
+          .single();
+
+        if (error) throw error;
+
+        if (data?.data) {
+          setSettings(data.data);
+        }
+      } catch (error) {
+        console.error("Failed to load settings:", error);
+        toast({
+          title: "Error loading settings",
+          description:
+            "There was an error loading your settings. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadSettings();
+  }, []);
 
   const handleSaveSettings = async () => {
     setIsSaving(true);
     try {
-      // In a real app, this would be an API call to save settings
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
+      const { error } = await supabase
+        .from("settings")
+        .upsert([{ type: "user_settings", data: settings }], {
+          onConflict: "type",
+        });
+
+      if (error) throw error;
+
       toast({
         title: "Settings saved",
         description: "Your settings have been saved successfully.",
@@ -76,24 +117,33 @@ export default function SettingsPage() {
   };
 
   const handleWorkdayToggle = (day: keyof typeof settings.workdays) => {
-    setSettings({
-      ...settings,
+    setSettings((prev) => ({
+      ...prev,
       workdays: {
-        ...settings.workdays,
-        [day]: !settings.workdays[day],
+        ...prev.workdays,
+        [day]: !prev.workdays[day],
       },
-    });
+    }));
   };
 
   const handleTimeChange = (type: "startTime" | "endTime", value: string) => {
-    setSettings({
-      ...settings,
+    setSettings((prev) => ({
+      ...prev,
       defaultTimes: {
-        ...settings.defaultTimes,
+        ...prev.defaultTimes,
         [type]: value,
       },
-    });
+    }));
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <span className="ml-2">Loading settings...</span>
+      </div>
+    );
+  }
 
   return (
     <SidebarProvider
@@ -127,7 +177,7 @@ export default function SettingsPage() {
           </div>
         </header>
 
-        {/* Setting */}
+        {/* Settings */}
         <div className="space-y-6 px-4 md:px-6 lg:px-8 pt-6">
           <div className="flex justify-between items-center">
             <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
@@ -181,7 +231,7 @@ export default function SettingsPage() {
                   </div>
                 </CardContent>
                 <CardFooter>
-                  <Button onClick={handleSaveSettings} disabled={isSaving}>
+                  <Button onClick={handleSaveSettings} disabled={isSaving} className="ml-auto">
                     <Save className="mr-2 h-4 w-4" />
                     {isSaving ? "Saving..." : "Save Changes"}
                   </Button>
@@ -202,30 +252,97 @@ export default function SettingsPage() {
                   <div>
                     <h3 className="text-lg font-medium mb-4">Workdays</h3>
                     <div className="grid gap-4 sm:grid-cols-2">
-                      {Object.entries(settings.workdays).map(
-                        ([day, isActive]) => (
-                          <div
-                            key={day}
-                            className="flex items-center justify-between space-x-2"
-                          >
-                            <Label
-                              htmlFor={`workday-${day}`}
-                              className="capitalize"
-                            >
-                              {day}
-                            </Label>
-                            <Switch
-                              id={`workday-${day}`}
-                              checked={isActive}
-                              onCheckedChange={() =>
-                                handleWorkdayToggle(
-                                  day as keyof typeof settings.workdays
-                                )
-                              }
-                            />
-                          </div>
-                        )
-                      )}
+                      <div className="flex items-center justify-between space-x-2">
+                        <Label htmlFor="workday-monday" className="capitalize">
+                          Monday
+                        </Label>
+                        <Switch
+                          id="workday-monday"
+                          checked={settings.workdays.monday}
+                          onCheckedChange={() => handleWorkdayToggle("monday")}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between space-x-2">
+                        <Label htmlFor="workday-tuesday" className="capitalize">
+                          Tuesday
+                        </Label>
+                        <Switch
+                          id="workday-tuesday"
+                          checked={settings.workdays.tuesday}
+                          onCheckedChange={() => handleWorkdayToggle("tuesday")}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between space-x-2">
+                        <Label
+                          htmlFor="workday-wednesday"
+                          className="capitalize"
+                        >
+                          Wednesday
+                        </Label>
+                        <Switch
+                          id="workday-wednesday"
+                          checked={settings.workdays.wednesday}
+                          onCheckedChange={() =>
+                            handleWorkdayToggle("wednesday")
+                          }
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between space-x-2">
+                        <Label
+                          htmlFor="workday-thursday"
+                          className="capitalize"
+                        >
+                          Thursday
+                        </Label>
+                        <Switch
+                          id="workday-thursday"
+                          checked={settings.workdays.thursday}
+                          onCheckedChange={() =>
+                            handleWorkdayToggle("thursday")
+                          }
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between space-x-2">
+                        <Label htmlFor="workday-friday" className="capitalize">
+                          Friday
+                        </Label>
+                        <Switch
+                          id="workday-friday"
+                          checked={settings.workdays.friday}
+                          onCheckedChange={() => handleWorkdayToggle("friday")}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between space-x-2">
+                        <Label
+                          htmlFor="workday-saturday"
+                          className="capitalize"
+                        >
+                          Saturday
+                        </Label>
+                        <Switch
+                          id="workday-saturday"
+                          checked={settings.workdays.saturday}
+                          onCheckedChange={() =>
+                            handleWorkdayToggle("saturday")
+                          }
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between space-x-2">
+                        <Label htmlFor="workday-sunday" className="capitalize">
+                          Sunday
+                        </Label>
+                        <Switch
+                          id="workday-sunday"
+                          checked={settings.workdays.sunday}
+                          onCheckedChange={() => handleWorkdayToggle("sunday")}
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -259,8 +376,8 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </CardContent>
-                <CardFooter>
-                  <Button onClick={handleSaveSettings} disabled={isSaving}>
+                <CardFooter >
+                  <Button onClick={handleSaveSettings} disabled={isSaving} className="ml-auto">
                     <Save className="mr-2 h-4 w-4" />
                     {isSaving ? "Saving..." : "Save Changes"}
                   </Button>
@@ -335,12 +452,6 @@ export default function SettingsPage() {
                     </>
                   )}
                 </CardContent>
-                <CardFooter>
-                  <Button onClick={handleSaveSettings} disabled={isSaving}>
-                    <Save className="mr-2 h-4 w-4" />
-                    {isSaving ? "Saving..." : "Save Changes"}
-                  </Button>
-                </CardFooter>
               </Card>
             </TabsContent>
           </Tabs>

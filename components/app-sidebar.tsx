@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import * as React from "react"
+import * as React from "react";
 import {
   IconCamera,
   IconChartBar,
@@ -18,12 +18,12 @@ import {
   IconSettings,
   IconUsers,
   IconDevicesDollar,
-} from "@tabler/icons-react"
+} from "@tabler/icons-react";
 
-import { NavDocuments } from "@/components/nav-documents"
-import { NavMain } from "@/components/nav-main"
-import { NavSecondary } from "@/components/nav-secondary"
-import { NavUser } from "@/components/nav-user"
+import { NavDocuments } from "@/components/nav-documents";
+import { NavMain } from "@/components/nav-main";
+import { NavSecondary } from "@/components/nav-secondary";
+import { NavUser } from "@/components/nav-user";
 import {
   Sidebar,
   SidebarContent,
@@ -32,40 +32,16 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/sidebar";
+import { supabase } from "@/lib/supabaseClient";
 
-const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "",
-  },
+const navData = {
   navMain: [
-    {
-      title: "Dashboard",
-      url: "/dashboard",
-      icon: IconDashboard,
-    },
-    {
-      title: "Workers",
-      url: "/dashboard/workers",
-      icon: IconUsers,
-    },
-    {
-      title: "Projects",
-      url: "/dashboard/projects",
-      icon: IconFolder,
-    },
-    {
-      title: "Timesheets",
-      url: "/dashboard/timesheets",
-      icon: IconFileDescription,
-    },
-    {
-      title: "Payroll",
-      url: "/dashboard/payroll",
-      icon: IconDevicesDollar,
-    },
+    { title: "Dashboard", url: "/dashboard", icon: IconDashboard },
+    { title: "Workers", url: "/dashboard/workers", icon: IconUsers },
+    { title: "Projects", url: "/dashboard/projects", icon: IconFolder },
+    { title: "Timesheets", url: "/dashboard/timesheets", icon: IconFileDescription },
+    { title: "Payroll", url: "/dashboard/payroll", icon: IconDevicesDollar },
   ],
   navClouds: [
     {
@@ -74,14 +50,8 @@ const data = {
       isActive: true,
       url: "#",
       items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
+        { title: "Active Proposals", url: "#" },
+        { title: "Archived", url: "#" },
       ],
     },
     {
@@ -89,14 +59,8 @@ const data = {
       icon: IconFileDescription,
       url: "#",
       items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
+        { title: "Active Proposals", url: "#" },
+        { title: "Archived", url: "#" },
       ],
     },
     {
@@ -104,63 +68,63 @@ const data = {
       icon: IconFileAi,
       url: "#",
       items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
+        { title: "Active Proposals", url: "#" },
+        { title: "Archived", url: "#" },
       ],
     },
   ],
   navSecondary: [
-    {
-      title: "Settings",
-      url: "/settings",
-      icon: IconSettings,
-    },
-    {
-      title: "Get Help",
-      url: "#",
-      icon: IconHelp,
-    },
-    {
-      title: "Search",
-      url: "#",
-      icon: IconSearch,
-    },
+    { title: "Settings", url: "/dashboard/settings", icon: IconSettings },
+    { title: "Get Help", url: "#", icon: IconHelp },
+    { title: "Search", url: "#", icon: IconSearch },
   ],
   documents: [
-    {
-      name: "Data Library",
-      url: "#",
-      icon: IconDatabase,
-    },
-    {
-      name: "Reports",
-      url: "#",
-      icon: IconReport,
-    },
-    {
-      name: "Word Assistant",
-      url: "#",
-      icon: IconFileWord,
-    },
+    { name: "Data Library", url: "#", icon: IconDatabase },
+    { name: "Reports", url: "#", icon: IconReport },
+    { name: "Word Assistant", url: "#", icon: IconFileWord },
   ],
-}
+};
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
+  const [user, setUser] = React.useState({
+    name: "Loading...",
+    email: "Loading...",
+    avatar: "",
+  });
+
+  React.useEffect(() => {
+    const getUser = async () => {
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
+
+      if (error || !user) {
+        console.error("Failed to fetch user:", error);
+        setUser({
+          name: "Unknown",
+          email: "unknown@example.com",
+          avatar: "",
+        });
+        return;
+      }
+
+      setUser({
+        name: user.user_metadata?.full_name || "No Name",
+        email: user.email || "No Email",
+        avatar: user.user_metadata?.avatar_url || "",
+      });
+    };
+
+    getUser();
+  }, []);
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              className="data-[slot=sidebar-menu-button]:!p-1.5"
-            >
+            <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:!p-1.5">
               <a href="#">
                 <IconHammer className="!size-5" />
                 <span className="text-base font-semibold">WCS</span>
@@ -170,13 +134,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
-        {/*<NavDocuments items={data.documents} />*/}
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
+        <NavMain items={navData.navMain} />
+        {/* Uncomment when needed */}
+        {/* <NavDocuments items={navData.documents} /> */}
+        <NavSecondary items={navData.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser user={user} />
       </SidebarFooter>
     </Sidebar>
-  )
+  );
 }

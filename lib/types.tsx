@@ -38,7 +38,7 @@ export interface TimesheetEntry {
 }
 
 export interface PayrollEntry {
-  id: string
+  id?: string
   worker_id: string
   worker_name: string
   period_start: string
@@ -68,4 +68,11 @@ export interface WorkdaySettings {
   friday: boolean
   saturday: boolean
   sunday: boolean
+}
+
+export interface Assignment {
+  id: string
+  worker_id: string
+  project_id: string
+  created_at: string
 }

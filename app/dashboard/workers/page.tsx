@@ -29,7 +29,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { fetchWorkers } from "@/lib/data";
 import type { Worker } from "@/lib/types";
 import {
   AlertDialog,
@@ -59,7 +58,11 @@ export default function WorkersPage() {
   const loadWorkers = async () => {
     setIsLoading(true);
     try {
-      const data = await fetchWorkers();
+      const { data, error } = await supabase
+        .from("workers")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
       setWorkers(data);
     } catch (error) {
       console.error("Failed to fetch workers:", error);
@@ -69,74 +72,101 @@ export default function WorkersPage() {
   };
 
   const handleCreateWorker = async (worker: Omit<Worker, "id">) => {
-    // In a real app, this would be an API call to create a worker
-    const newWorker = {
-      id: Date.now().toString(),
-      ...worker,
-    };
-    setWorkers([...workers, newWorker]);
-    setIsFormOpen(false);
+    try {
+      const { data, error } = await supabase
+        .from("workers")
+        .insert(worker)
+        .select()
+        .single();
+      if (error) throw error;
+      setWorkers([...workers, data]);
+    } catch (error) {
+      console.error("Failed to create worker:", error);
+    } finally {
+      setIsFormOpen(false);
+    }
   };
 
   const handleUpdateWorker = async (worker: Worker) => {
-    // In a real app, this would be an API call to update a worker
-    setWorkers(workers.map((w) => (w.id === worker.id ? worker : w)));
-    setSelectedWorker(null);
-    setIsFormOpen(false);
+    try {
+      const { data, error } = await supabase
+        .from("workers")
+        .update({
+          name: worker.name,
+          email: worker.email,
+          hourly_rate: worker.hourly_rate,
+          active: worker.active,
+        })
+        .eq("id", worker.id)
+        .select()
+        .single();
+      if (error) throw error;
+      setWorkers(workers.map((w) => (w.id === worker.id ? data : w)));
+    } catch (error) {
+      console.error("Failed to update worker:", error);
+    } finally {
+      setSelectedWorker(null);
+      setIsFormOpen(false);
+    }
   };
 
   const handleDeleteWorker = async () => {
     if (!selectedWorker) return;
-
-    // In a real app, this would be an API call to delete a worker
-    setWorkers(workers.filter((w) => w.id !== selectedWorker.id));
-    setSelectedWorker(null);
-    setIsDeleteDialogOpen(false);
+    try {
+      const { error } = await supabase
+        .from("workers")
+        .delete()
+        .eq("id", selectedWorker.id);
+      if (error) throw error;
+      setWorkers(workers.filter((w) => w.id !== selectedWorker.id));
+    } catch (error) {
+      console.error("Failed to delete worker:", error);
+    } finally {
+      setSelectedWorker(null);
+      setIsDeleteDialogOpen(false);
+    }
   };
 
   const handleToggleActive = async (worker: Worker) => {
-    // In a real app, this would be an API call to update a worker's active status
-    const updatedWorker = { ...worker, active: !worker.active };
-    setWorkers(workers.map((w) => (w.id === worker.id ? updatedWorker : w)));
+    try {
+      const { data, error } = await supabase
+        .from("workers")
+        .update({ active: !worker.active })
+        .eq("id", worker.id)
+        .select()
+        .single();
+      if (error) throw error;
+      setWorkers(workers.map((w) => (w.id === worker.id ? data : w)));
+    } catch (error) {
+      console.error("Failed to toggle worker status:", error);
+    }
   };
+
   return (
     <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "calc(var(--spacing) * 72)",
-          "--header-height": "calc(var(--spacing) * 12)",
-        } as React.CSSProperties
-      }
+      style={{
+        "--sidebar-width": "calc(var(--spacing) * 72)",
+        "--header-height": "calc(var(--spacing) * 12)",
+      } as React.CSSProperties}
     >
       <AppSidebar variant="inset" />
       <SidebarInset>
         <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
           <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
             <SidebarTrigger className="-ml-1" />
-            <Separator
-              orientation="vertical"
-              className="mx-2 data-[orientation=vertical]:h-4"
-            />
+            <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
             <h1 className="text-base font-medium">Workers Management</h1>
             <div className="ml-auto flex items-center gap-2">
-              <Button
-                variant="ghost"
-                asChild
-                size="sm"
-                className="hidden sm:flex"
-              >
+              <Button variant="ghost" asChild size="sm" className="hidden sm:flex">
                 <ModeToggle />
               </Button>
             </div>
           </div>
         </header>
 
-        {/* Add Worker Section */}
-        <div className="space-y-6 px-4 md:px-6 lg:px-8 pt-6">
+        <div className="space-y-6 px-4 md:px-6 lg:px-8 pt-6 pb-6">
           <div className="flex justify-between items-center">
-            <h2 className="text-3xl font-bold tracking-tight">
-              Workers Management
-            </h2>
+            <h2 className="text-3xl font-bold tracking-tight">Workers Management</h2>
             <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
               <DialogTrigger asChild>
                 <Button>
@@ -146,9 +176,7 @@ export default function WorkersPage() {
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>
-                    {selectedWorker ? "Edit Worker" : "Add New Worker"}
-                  </DialogTitle>
+                  <DialogTitle>{selectedWorker ? "Edit Worker" : "Add New Worker"}</DialogTitle>
                   <DialogDescription>
                     {selectedWorker
                       ? "Update the worker's information below."
@@ -157,9 +185,7 @@ export default function WorkersPage() {
                 </DialogHeader>
                 <WorkerForm
                   worker={selectedWorker}
-                  onSubmit={
-                    selectedWorker ? handleUpdateWorker : handleCreateWorker
-                  }
+                  onSubmit={selectedWorker ? handleUpdateWorker : handleCreateWorker}
                   onCancel={() => {
                     setSelectedWorker(null);
                     setIsFormOpen(false);
@@ -213,10 +239,7 @@ export default function WorkersPage() {
                           <span className="sr-only">Edit</span>
                         </Button>
                         <AlertDialog
-                          open={
-                            isDeleteDialogOpen &&
-                            selectedWorker?.id === worker.id
-                          }
+                          open={isDeleteDialogOpen && selectedWorker?.id === worker.id}
                           onOpenChange={(open) => {
                             if (!open) {
                               setSelectedWorker(null);
@@ -241,16 +264,12 @@ export default function WorkersPage() {
                             <AlertDialogHeader>
                               <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                               <AlertDialogDescription>
-                                This will permanently delete {worker.name} and
-                                all associated time entries. This action cannot
-                                be undone.
+                                This will permanently delete {worker.name} and all associated time entries. This action cannot be undone.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={handleDeleteWorker}>
-                                Delete
-                              </AlertDialogAction>
+                              <AlertDialogAction onClick={handleDeleteWorker}>Delete</AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
@@ -269,8 +288,7 @@ export default function WorkersPage() {
               </div>
               <h3 className="text-lg font-medium mb-2">No workers found</h3>
               <p className="text-sm text-muted-foreground text-center mb-4">
-                You haven't added any workers yet. Add your first worker to get
-                started.
+                You haven't added any workers yet. Add your first worker to get started.
               </p>
               <Button onClick={() => setIsFormOpen(true)}>
                 <UserCheck className="mr-2 h-4 w-4" />

@@ -51,6 +51,8 @@ import {
   updatePayrollSettings,
 } from "@/lib/data";
 import type { Worker, PayrollEntry, PayrollSettings } from "@/lib/types";
+import { cleanupDuplicatePayrollEntries } from "@/lib/data";
+import { supabase } from "@/lib/supabaseClient"
 
 export default function PayrollPage() {
   const [periodType, setPeriodType] = useState<"weekly" | "monthly">("weekly");
@@ -62,29 +64,29 @@ export default function PayrollPage() {
     useState<PayrollSettings | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("payroll");
-  const [workers, setWorkers] = useState<Worker[]>([
-    {
-      id: "1",
-      name: "John Doe",
-      email: "john@example.com",
-      active: true,
-      hourly_rate: 25,
-    },
-    {
-      id: "2",
-      name: "Jane Smith",
-      email: "jane@example.com",
-      active: true,
-      hourly_rate: 28,
-    },
-    {
-      id: "3",
-      name: "Bob Johnson",
-      email: "bob@example.com",
-      active: true,
-      hourly_rate: 22,
-    },
-  ]);
+  const [workers, setWorkers] = useState<Worker[]>([])
+
+  const loadWorkersNames = async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+      .from("workers")
+      .select("id, name")
+      .order("created_at", {ascending: false});
+
+    if (error) throw error;
+    setWorkers(data)
+    } catch(error) {
+      console.log("Error Loading names:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect (() => {
+    loadWorkersNames();
+  }, [])
+
 
   // Calculate period start and end dates
   const getPeriodDates = () => {
@@ -112,6 +114,7 @@ export default function PayrollPage() {
   const loadPayrollData = async () => {
     setIsLoading(true);
     try {
+      await cleanupDuplicatePayrollEntries();
       const entries = await fetchPayrollEntries(
         startDate,
         endDate,
@@ -257,7 +260,7 @@ export default function PayrollPage() {
         </header>
 
         {/*Payroll*/}
-        <div className="space-y-6 px-4 md:px-6 lg:px-8 pt-6">
+        <div className="space-y-6 px-4 md:px-6 lg:px-8 pt-6 pb-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <h2 className="text-3xl font-bold tracking-tight">Payroll</h2>
             <div className="flex flex-col sm:flex-row gap-2">
@@ -420,7 +423,7 @@ export default function PayrollPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">
-                      {totalRegularHours.toFixed(1)}
+                      {Number.isInteger(totalRegularHours) ? totalRegularHours : parseFloat(totalRegularHours.toFixed(1))}
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Standard rate
@@ -444,7 +447,7 @@ export default function PayrollPage() {
                   </CardContent>
                 </Card>
               </div>
-
+              <div>
               <PayrollTable
                 entries={payrollEntries}
                 isLoading={isLoading}
@@ -453,6 +456,7 @@ export default function PayrollPage() {
                 startDate={startDate}
                 endDate={endDate}
               />
+              </div>              
             </TabsContent>
 
             <TabsContent value="settings">

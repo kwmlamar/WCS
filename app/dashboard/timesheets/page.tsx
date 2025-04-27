@@ -69,7 +69,7 @@ export default function TimesheetsPage() {
     wednesday: true,
     thursday: true,
     friday: true,
-    saturday: false,
+    saturday: true,
     sunday: false,
   });
   const [timesheetStats, setTimesheetStats] = useState({
@@ -320,7 +320,7 @@ export default function TimesheetsPage() {
         </header>
 
         {/* Timesheet table*/}
-        <div className="space-y-6 px-4 md:px-6 lg:px-8 pt-6">
+        <div className="space-y-6 px-4 md:px-6 lg:px-8 pt-6 pb-6">
           <div className="flex justify-between items-center">
             <h2 className="text-3xl font-bold tracking-tight">Timesheets</h2>
             <div className="flex flex-col sm:flex-row gap-2">
@@ -401,7 +401,7 @@ export default function TimesheetsPage() {
                     onClick={handleBulkUpdateToEightHours}
                     disabled={isBulkUpdating}
                   >
-                    Set Selected to 8 Hours
+                    Set All to 8 Hours
                   </Button>
                   <Button
                     variant="outline"
@@ -442,7 +442,7 @@ export default function TimesheetsPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {timesheetStats.totalHours.toFixed(1)}
+                  {Number.isInteger(timesheetStats.totalHours) ? timesheetStats.totalHours : parseFloat(timesheetStats.totalHours.toFixed(1))}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   For selected period
