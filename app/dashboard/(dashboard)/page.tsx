@@ -1,9 +1,6 @@
 "use client";
 
 import { AppSidebar } from "@/components/app-sidebar";
-import { ChartAreaInteractive } from "@/components/chart-area-interactive";
-import { DataTable } from "@/components/data-table";
-import { SectionCards } from "@/components/section-cards";
 import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
@@ -18,7 +15,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { TimeEntriesTable } from "./time-entries-table";
+
 
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -90,7 +87,7 @@ export default function DashboardPage() {
   }, [date]);
 
   // Calculate summary statistics
-  const activeWorkers = timeEntries.filter((entry) => !entry.is_absent).length;
+  // const activeWorkers = timeEntries.filter((entry) => !entry.is_absent).length;
   const totalWorkers = workers.filter((worker) => worker.active).length;
   const totalProjects = [
     ...new Set(

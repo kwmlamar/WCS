@@ -9,7 +9,6 @@ import type {
   Assignment
 } from "./types";
 import { format, addDays, differenceInDays } from "date-fns";
-import { startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 
 import { supabase } from "@/lib/supabaseClient"
 
